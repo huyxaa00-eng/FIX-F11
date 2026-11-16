@@ -8,7 +8,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 app = Flask(__name__)
 
-# Đã điền sẵn Token và Secret của bạn
+# Điền sẵn Token và Secret của bạn
 LINE_CHANNEL_ACCESS_TOKEN = "ncim2CWvpmksOVNLAID+DspMKIC97Mcobc+p883QRJ0rYXfijKg/VXw5lpgf2nNqZWNtztsY/2G1QvqgckLaKetyivU12X1/O+ItkVYp6KWMW++8RR/q2lFI/asIEgcRAlVGW27R4afwgm29tP+7+QdB04t89/1O/w1cDnyilFU="
 LINE_CHANNEL_SECRET = "d651dbbf5854a6cb29bb6a5a6c476476"
 
@@ -60,11 +60,18 @@ def handle_message(event):
     # Thực hiện dịch
     translated = simple_translate(user_text, target_lang)
 
-  print(f"Kết quả gửi đi: {translated}")
+  # Xác định ID nguồn gửi (cá nhân, nhóm, phòng)
+  source_id = event.source.user_id
+  if event.source.type == 'group':
+    source_id = event.source.group_id
+  elif event.source.type == 'room':
+    source_id = event.source.room_id
 
-  # Trả kết quả đã dịch về lại LINE
-  line_bot_api.reply_message(
-      event.reply_token,
+  print(f"Gửi kết quả tới {source_id}: {translated}")
+
+  # Gửi kết quả đã dịch về LINE
+  line_bot_api.push_message(
+      source_id,
       TextSendMessage(text=translated)
   )
 
