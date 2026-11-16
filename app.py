@@ -8,7 +8,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 app = Flask(__name__)
 
-# Dán trực tiếp Token và Secret của bạn vào đây
+# Đã điền sẵn Token và Secret của bạn
 LINE_CHANNEL_ACCESS_TOKEN = "ncim2CWvpmksOVNLAID+DspMKIC97Mcobc+p883QRJ0rYXfijKg/VXw5lpgf2nNqZWNtztsY/2G1QvqgckLaKetyivU12X1/O+ItkVYp6KWMW++8RR/q2lFI/asIEgcRAlVGW27R4afwgm29tP+7+QdB04t89/1O/w1cDnyilFU="
 LINE_CHANNEL_SECRET = "d651dbbf5854a6cb29bb6a5a6c476476"
 
@@ -25,69 +25,46 @@ def simple_translate(text, target_lang):
     if response.status_code == 200:
       res_json = response.json()
       translated_text = "".join([item[0] for item in res_json[0] if item[0]])
-      return translated_text
+      return translated_text if translated_text else text
   except Exception as e:
     print(f"Lỗi dịch thuật: {e}")
   return text
 
 
-def get_current_ip_and_proxy_status():
-  """Kiểm tra IP hiện tại và trạng thái proxy (Lệnh fixip)"""
-  try:
-    ip_res = requests.get("https://api.ipify.org?format=json", timeout=5)
-    current_ip = ip_res.json().get("ip", "Không xác định") if ip_res.status_code == 200 else "Không lấy được IP"
-    
-    status_msg = f"🌐 **Trạng thái Proxy & IP:**\n- IP hiện tại đang chạy: {current_ip}\n- Trạng thái: Hoạt động bình thường"
-    return status_msg
-  except Exception as e:
-    return f"Lỗi kiểm tra IP/Proxy: {str(e)}"
 @app.route("/callback", methods=["POST"])
 def callback():
-  # Lấy chữ ký từ header của LINE
   signature = request.headers.get("X-Line-Signature", "")
   body = request.get_data(as_text=True)
-  app.logger.info("Request body: " + body)
-
   try:
-    # Xử lý sự kiện từ LINE bot
     handler.handle(body, signature)
   except InvalidSignatureError:
-    # Tránh làm sập webhook bằng cách bỏ qua lỗi chữ ký nếu đang test hoặc lỗi token cấu hình
-    print("Invalid signature. Please check your channel secret access token.")
+    abort(400)
   except Exception as e:
-    print(f"Lỗi xử lý callback: {e}")
-
-  # QUAN TRỌNG: Luôn luôn trả về "OK" (mã 200) cho LINE để webhook không bị báo lỗi đỏ
+    print(f"Lỗi callback: {e}")
   return "OK", 200
-
 
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
   user_text = event.message.text.strip()
-  print(f"Nhận tin nhắn: {user_text}")
+  print(f"Nhận tin nhắn gốc: {user_text}")
 
-  # 1. Kiểm tra nếu nhắn "fixip" hoặc "status"
-  if user_text.lower() == "fixip" or user_text.lower() == "status":
-    translated = get_current_ip_and_proxy_status()
+  # Kiểm tra lệnh fixip / status
+  if user_text.lower() in ["fixip", "status"]:
+    translated = "🌐 Bot dịch thuật đang hoạt động ổn định trên Render!"
   else:
-    # 2. Tự động nhận diện chữ Trung Quốc để dịch qua lại (vi <-> zh-TW)
+    # Tự động nhận diện chữ Trung Quốc để dịch qua lại (Việt <-> Trung Phồn Thể)
     has_chinese = bool(re.search(r'[\u4e00-\u9fff]', user_text))
     target_lang = "vi" if has_chinese else "zh-TW"
     
     # Thực hiện dịch
     translated = simple_translate(user_text, target_lang)
 
-  # Xác định ID nguồn gửi (cá nhân hoặc nhóm)
-  source_id = event.source.user_id
-  if event.source.type == 'group':
-    source_id = event.source.group_id
-  elif event.source.type == 'room':
-    source_id = event.source.room_id
+  print(f"Kết quả gửi đi: {translated}")
 
-  # 3. QUAN TRỌNG: Gửi biến `translated` (kết quả dịch) về LINE chứ không gửi `user_text`
-  line_bot_api.push_message(
-      source_id,
+  # Trả kết quả đã dịch về lại LINE
+  line_bot_api.reply_message(
+      event.reply_token,
       TextSendMessage(text=translated)
   )
 
